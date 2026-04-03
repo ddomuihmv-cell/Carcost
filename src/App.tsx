@@ -445,7 +445,7 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen w-full max-w-md mx-auto bg-slate-950 relative shadow-2xl flex flex-col overflow-hidden">
+    <div className="h-screen w-full max-w-4xl mx-auto bg-slate-950 relative shadow-2xl flex flex-col overflow-hidden">
       {/* Header */}
       <header className="h-14 flex items-center justify-between px-4 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 shrink-0 z-20">
         <div className="flex items-center gap-2">
@@ -493,97 +493,99 @@ export default function App() {
             >
               {/* Sticky Cost Summary Card */}
               <div className="sticky top-0 z-20 p-4 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 shadow-xl">
-                <div className="space-y-3">
-                  {/* Single Trip */}
-                  <div>
-                    <div className="flex justify-between items-end mb-1">
-                      <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">預估單趟總成本</p>
-                      <p className="text-xs text-slate-500 font-mono text-right">{mileage} KM</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                  <div className="space-y-3">
+                    {/* Single Trip */}
+                    <div>
+                      <div className="flex justify-between items-end mb-1">
+                        <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">預估單趟總成本</p>
+                        <p className="text-xs text-slate-500 font-mono text-right">{mileage} KM</p>
+                      </div>
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-3xl font-black text-white font-mono tracking-tight">
+                          <span className="text-xl text-slate-500 mr-1">$</span>
+                          {Math.round(stats.dailyTotal).toLocaleString()}
+                        </span>
+                        <div className="text-right">
+                          <span className="text-lg font-bold text-blue-400 font-mono">${stats.costPerKm.toFixed(1)}</span>
+                          <span className="text-[10px] text-slate-500 ml-1">/KM</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex justify-between items-baseline">
-                      <span className="text-3xl font-black text-white font-mono tracking-tight">
-                        <span className="text-xl text-slate-500 mr-1">$</span>
-                        {Math.round(stats.dailyTotal).toLocaleString()}
-                      </span>
-                      <div className="text-right">
-                        <span className="text-lg font-bold text-blue-400 font-mono">${stats.costPerKm.toFixed(1)}</span>
-                        <span className="text-[10px] text-slate-500 ml-1">/KM</span>
+
+                    {/* Return Trip */}
+                    <div className="pt-2 border-t border-slate-800/50">
+                      <div className="flex justify-between items-end mb-1">
+                        <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">預估來回趟總成本</p>
+                        <p className="text-xs text-slate-500 font-mono text-right">{Number(mileage) * 2} KM</p>
+                      </div>
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-2xl font-black text-slate-300 font-mono tracking-tight">
+                          <span className="text-lg text-slate-500 mr-1">$</span>
+                          {Math.round(stats.dailyTotal * 2).toLocaleString()}
+                        </span>
                       </div>
                     </div>
                   </div>
-
-                  {/* Return Trip */}
-                  <div className="pt-2 border-t border-slate-800/50">
-                    <div className="flex justify-between items-end mb-1">
-                      <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">預估來回趟總成本</p>
-                      <p className="text-xs text-slate-500 font-mono text-right">{Number(mileage) * 2} KM</p>
-                    </div>
-                    <div className="flex justify-between items-baseline">
-                      <span className="text-2xl font-black text-slate-300 font-mono tracking-tight">
-                        <span className="text-lg text-slate-500 mr-1">$</span>
-                        {Math.round(stats.dailyTotal * 2).toLocaleString()}
-                      </span>
-                    </div>
+                  
+                  {/* Interactive Pie Chart */}
+                  <div className="h-40 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={stats.breakdown.filter(item => item.value > 0)}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={45}
+                          outerRadius={65}
+                          paddingAngle={5}
+                          dataKey="value"
+                          nameKey="label"
+                          animationBegin={0}
+                          animationDuration={800}
+                        >
+                          {stats.breakdown.map((entry, index) => {
+                            // Extract hex color from tailwind class if possible, or use defaults
+                            const colorMap: Record<string, string> = {
+                              'bg-blue-500': '#3b82f6',
+                              'bg-emerald-500': '#10b981',
+                              'bg-amber-500': '#f59e0b',
+                              'bg-rose-500': '#f43f5e',
+                              'bg-slate-400': '#94a3b8',
+                              'bg-cyan-500': '#06b6d4'
+                            };
+                            return <Cell key={`cell-${index}`} fill={colorMap[entry.color] || '#6366f1'} stroke="none" />;
+                          })}
+                        </Pie>
+                        <Tooltip 
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              const data = payload[0].payload;
+                              const percentage = ((data.value / stats.dailyTotal) * 100).toFixed(1);
+                              return (
+                                <div className="bg-slate-900 border border-slate-700 p-2 rounded-lg shadow-xl">
+                                  <p className="text-xs font-bold text-white flex items-center gap-2">
+                                    <span className={`w-2 h-2 rounded-full ${data.color}`}></span>
+                                    {data.label}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 mt-1">
+                                    金額: <span className="text-white font-mono">${Math.round(data.value).toLocaleString()}</span>
+                                  </p>
+                                  <p className="text-[10px] text-slate-400">
+                                    佔比: <span className="text-white font-mono">{percentage}%</span>
+                                  </p>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
                 
-                {/* Interactive Pie Chart */}
-                <div className="h-40 w-full mt-2 mb-2">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={stats.breakdown.filter(item => item.value > 0)}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={45}
-                        outerRadius={65}
-                        paddingAngle={5}
-                        dataKey="value"
-                        nameKey="label"
-                        animationBegin={0}
-                        animationDuration={800}
-                      >
-                        {stats.breakdown.map((entry, index) => {
-                          // Extract hex color from tailwind class if possible, or use defaults
-                          const colorMap: Record<string, string> = {
-                            'bg-blue-500': '#3b82f6',
-                            'bg-emerald-500': '#10b981',
-                            'bg-amber-500': '#f59e0b',
-                            'bg-rose-500': '#f43f5e',
-                            'bg-slate-400': '#94a3b8',
-                            'bg-cyan-500': '#06b6d4'
-                          };
-                          return <Cell key={`cell-${index}`} fill={colorMap[entry.color] || '#6366f1'} stroke="none" />;
-                        })}
-                      </Pie>
-                      <Tooltip 
-                        content={({ active, payload }) => {
-                          if (active && payload && payload.length) {
-                            const data = payload[0].payload;
-                            const percentage = ((data.value / stats.dailyTotal) * 100).toFixed(1);
-                            return (
-                              <div className="bg-slate-900 border border-slate-700 p-2 rounded-lg shadow-xl">
-                                <p className="text-xs font-bold text-white flex items-center gap-2">
-                                  <span className={`w-2 h-2 rounded-full ${data.color}`}></span>
-                                  {data.label}
-                                </p>
-                                <p className="text-[10px] text-slate-400 mt-1">
-                                  金額: <span className="text-white font-mono">${Math.round(data.value).toLocaleString()}</span>
-                                </p>
-                                <p className="text-[10px] text-slate-400">
-                                  佔比: <span className="text-white font-mono">{percentage}%</span>
-                                </p>
-                              </div>
-                            );
-                          }
-                          return null;
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                
-                <div className="bg-indigo-900/20 border border-indigo-500/30 rounded-xl p-3 relative overflow-hidden">
+                <div className="bg-indigo-900/20 border border-indigo-500/30 rounded-xl p-3 relative overflow-hidden mt-3">
                   <div className="flex justify-between items-start mb-1">
                     <span className="text-[10px] font-bold text-indigo-400 flex items-center gap-1"><Sparkles size={12}/> AI 成本健檢</span>
                     <button onClick={generateQuickInsight} disabled={isInsightLoading} className="text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-1 rounded shadow-md active:scale-95 transition-all disabled:opacity-50">
@@ -612,26 +614,28 @@ export default function App() {
                     {savedLocations.map((loc, idx) => <option key={idx} value={loc} />)}
                   </datalist>
 
-                  <div className="mb-4">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-1 mb-1.5 block">快速載入歷史路線</label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500"><FolderOpen size={16} /></div>
-                      <select 
-                        value={currentRouteId || ''} 
-                        onChange={(e) => handleLoadRouteById(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl py-3 pl-10 pr-4 outline-none focus:border-emerald-500 appearance-none text-base"
-                      >
-                        <option value="">-- 建立自訂新路線 --</option>
-                        {cloudRoutes.map(r => (
-                          <option key={r.id} value={r.id}>{r.name} ({r.origin} - {r.dest})</option>
-                        ))}
-                      </select>
-                      <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-500"><ChevronDown size={16} /></div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+                    <InputGroup label="路線名稱" type="text" icon={Tag} value={routeName} onChange={setRouteName} placeholder="例: 北高特急" />
+                    <div className="mb-4">
+                      <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-1 mb-1.5 block">快速載入歷史路線</label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500"><FolderOpen size={16} /></div>
+                        <select 
+                          value={currentRouteId || ''} 
+                          onChange={(e) => handleLoadRouteById(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl py-3 pl-10 pr-4 outline-none focus:border-emerald-500 appearance-none text-base"
+                        >
+                          <option value="">-- 建立自訂新路線 --</option>
+                          {cloudRoutes.map(r => (
+                            <option key={r.id} value={r.id}>{r.name} ({r.origin} - {r.dest})</option>
+                          ))}
+                        </select>
+                        <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-500"><ChevronDown size={16} /></div>
+                      </div>
                     </div>
                   </div>
 
-                  <InputGroup label="路線名稱" type="text" icon={Tag} value={routeName} onChange={setRouteName} placeholder="例: 北高特急" />
-                  <div className="flex flex-col gap-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 relative">
                     <InputGroup 
                       label="起點" 
                       type="text" 
@@ -641,9 +645,15 @@ export default function App() {
                       onAddRight={addLocation} 
                       placeholder="輸入或下拉選擇起點..." 
                     />
-                    <div className="flex items-center justify-center w-full text-slate-600 -my-4 z-10 relative pointer-events-none">
+                    
+                    <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none">
+                      <div className="bg-slate-900 p-1.5 rounded-full border border-slate-700 text-slate-500 shadow-lg"><ArrowRight size={16}/></div>
+                    </div>
+                    
+                    <div className="flex md:hidden items-center justify-center w-full text-slate-600 -my-4 z-10 relative pointer-events-none">
                       <div className="bg-slate-900 p-1 rounded-full"><ArrowDown size={14}/></div>
                     </div>
+
                     <InputGroup 
                       label="終點" 
                       type="text" 
@@ -654,27 +664,28 @@ export default function App() {
                       placeholder="輸入或下拉選擇終點..." 
                     />
                   </div>
-                  <div className="flex gap-3 items-end mt-2">
-                    <div className="flex-1">
+
+                  <div className="flex flex-col md:flex-row gap-3 items-end mt-2">
+                    <div className="flex-1 w-full">
                       <InputGroup label="單趟里程 (KM)" value={mileage} onChange={setMileage} icon={Route} />
                       <div className="px-1 -mt-3 mb-4 flex justify-between items-center">
                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">來回里程</span>
                         <span className="text-xs font-mono text-emerald-400 font-bold">{Number(mileage) * 2} KM</span>
                       </div>
                     </div>
-                    <div className="flex gap-2 mb-4">
+                    <div className="flex gap-2 mb-4 w-full md:w-auto">
                       <button 
                         onClick={() => {
                           if (!startPoint || !endPoint) return showToast("請先輸入起點與終點", "error");
                           window.open(`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(startPoint)}&destination=${encodeURIComponent(endPoint)}&travelmode=driving`, '_blank');
                         }}
-                        className="h-[46px] px-4 bg-slate-800 text-blue-400 rounded-xl font-bold border border-slate-700 active:bg-slate-700 transition-colors shrink-0 flex items-center gap-2"
+                        className="h-[46px] flex-1 md:flex-none px-4 bg-slate-800 text-blue-400 rounded-xl font-bold border border-slate-700 active:bg-slate-700 transition-colors shrink-0 flex items-center justify-center gap-2"
                         title="在 Google Maps 中查看路線"
                       >
                         <Navigation size={18}/>
                         核對
                       </button>
-                      <button onClick={calculateDistance} disabled={isCalculating} className="h-[46px] px-4 bg-slate-800 text-emerald-400 rounded-xl font-bold border border-slate-700 active:bg-slate-700 transition-colors shrink-0">
+                      <button onClick={calculateDistance} disabled={isCalculating} className="h-[46px] flex-1 md:flex-none px-6 bg-slate-800 text-emerald-400 rounded-xl font-bold border border-slate-700 active:bg-slate-700 transition-colors shrink-0">
                         {isCalculating ? <RotateCcw size={18} className="animate-spin"/> : "算距"}
                       </button>
                     </div>
@@ -684,23 +695,27 @@ export default function App() {
                 {/* Section: Variables */}
                 <section className="glass-card p-5 rounded-2xl">
                   <h2 className="text-sm font-bold text-blue-400 mb-4 flex items-center gap-2"><Fuel size={16}/> 動態成本 (油資/耗損)</h2>
-                  <div className="grid grid-cols-2 gap-x-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
                     <InputGroup label="柴油 (NT$/L)" value={fuelPrice} onChange={setFuelPrice} step="0.1" />
                     <InputGroup label="油耗 (km/L)" value={fuelConsumption} onChange={setFuelConsumption} step="0.1" />
                     <InputGroup label="尿素比例 (%)" value={ureaRate} onChange={setUreaRate} step="0.1" />
                     <InputGroup label="保修 (NT$/KM)" value={maintenanceRate} onChange={setMaintenanceRate} step="0.1" />
-                    <div className="col-span-2"><InputGroup label="E-tag (NT$/KM)" value={etagRate} onChange={setEtagRate} step="0.1" /></div>
+                    <div className="md:col-span-2"><InputGroup label="E-tag (NT$/KM)" value={etagRate} onChange={setEtagRate} step="0.1" /></div>
                   </div>
                 </section>
 
                 {/* Section: Fixed */}
                 <section className="glass-card p-5 rounded-2xl">
                   <h2 className="text-sm font-bold text-rose-400 mb-4 flex items-center gap-2"><Building2 size={16}/> 固定分攤成本</h2>
-                  <InputGroup label="司機日薪 (NT$)" value={driverSalary} onChange={setDriverSalary} icon={User} />
-                  <div className="grid grid-cols-3 gap-x-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+                    <div className="md:col-span-2">
+                      <InputGroup label="司機日薪 (NT$)" value={driverSalary} onChange={setDriverSalary} icon={User} />
+                    </div>
                     <InputGroup label="月貸款" value={loan} onChange={setLoan} />
                     <InputGroup label="年保費" value={insurance} onChange={setInsurance} />
-                    <InputGroup label="年稅金" value={taxes} onChange={setTaxes} />
+                    <div className="md:col-span-2">
+                      <InputGroup label="年稅金" value={taxes} onChange={setTaxes} />
+                    </div>
                   </div>
                 </section>
 
