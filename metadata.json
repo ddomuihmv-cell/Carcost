@@ -1,0 +1,7 @@
+{
+  "name": "Carcost",
+  "description": "專業的路線成本建模與 AI 優化顧問 APP，提供即時成本分析與報價建議。",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
