@@ -24,7 +24,7 @@ const GOOGLE_MAPS_KEY = (import.meta as any).env.VITE_GOOGLE_MAPS_KEY || "AIzaSy
 
 // --- UI Components ---
 const InputGroup = ({ label, type="number", value, onChange, icon: IconComp, step="any", placeholder, list, onAddRight }: any) => (
-  <div className="flex flex-col gap-1.5 mb-4">
+  <div className="flex flex-col gap-1 mb-3">
     <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-1">{label}</label>
     <div className="relative flex gap-2">
       <div className="relative flex-1">
@@ -123,7 +123,7 @@ export default function App() {
       // 讀取常用地點
       const resLocs = await fetch(`${GAS_URL}?sheet=locations`);
       const dataLocs = await resLocs.json();
-      if (Array.isArray(dataLocs)) {
+      if (Array.isArray(dataLocs) && dataLocs.length > 0) {
         const locNames = dataLocs.map((l: any) => l.name || l.location).filter(Boolean);
         if (locNames.length > 0) {
           setSavedLocations(locNames);
@@ -138,6 +138,7 @@ export default function App() {
   };
 
   const syncLocationsToCloud = async (newList: string[]) => {
+    setIsSyncing(true);
     try {
       await fetch(GAS_URL, {
         method: 'POST',
@@ -150,6 +151,8 @@ export default function App() {
       });
     } catch (e) {
       console.error("Locations sync failed:", e);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -393,7 +396,7 @@ export default function App() {
   return (
     <div className="h-screen w-full max-w-4xl mx-auto bg-slate-950 relative shadow-2xl flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="h-14 flex items-center justify-between px-4 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 shrink-0 z-20">
+      <header className="h-12 flex items-center justify-between px-4 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 shrink-0 z-20">
         <div className="flex items-center gap-2">
           <div className="relative flex items-center justify-center">
             {/* Continuous Ripple Effect */}
@@ -413,14 +416,14 @@ export default function App() {
           </h1>
         </div>
         
-        <div className="flex items-center">
+        <div className="flex items-center gap-3">
           {isSyncing ? (
-            <span className="text-[10px] text-emerald-400 font-bold tracking-wider flex items-center gap-1.5 bg-emerald-900/40 px-2 py-1 rounded-full border border-emerald-500/40 shadow-sm">
-              <Satellite size={12} className="animate-pulse" /> 同步中
+            <span className="text-[10px] text-emerald-400 font-bold tracking-wider flex items-center gap-1.5 bg-emerald-900/40 px-2.5 py-1.5 rounded-full border border-emerald-500/40 shadow-sm animate-pulse">
+              <Satellite size={12} className="animate-spin" /> 同步中...
             </span>
           ) : (
-            <span className="text-[10px] text-slate-500 font-bold tracking-wider flex items-center gap-1.5">
-              已連線 <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_6px_#10b981]"></div>
+            <span className="text-[10px] text-slate-400 font-bold tracking-wider flex items-center gap-1.5 bg-slate-800/40 px-2.5 py-1.5 rounded-full border border-slate-700/40">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_6px_#10b981] animate-pulse"></div> 已連線
             </span>
           )}
         </div>
@@ -438,36 +441,36 @@ export default function App() {
               className="h-full overflow-y-auto hide-scrollbar pb-24"
             >
               {/* Sticky Cost Summary Card */}
-              <div className="sticky top-0 z-20 p-4 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 shadow-xl">
+              <div className="sticky top-0 z-20 p-3 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 shadow-xl">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {/* Single Trip */}
                     <div>
-                      <div className="flex justify-between items-end mb-1">
+                      <div className="flex justify-between items-end mb-0.5">
                         <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">預估單趟總成本</p>
                         <p className="text-xs text-slate-500 font-mono text-right">{mileage} KM</p>
                       </div>
                       <div className="flex justify-between items-baseline">
-                        <span className="text-3xl font-black text-white font-mono tracking-tight">
-                          <span className="text-xl text-slate-500 mr-1">$</span>
+                        <span className="text-2xl font-black text-white font-mono tracking-tight">
+                          <span className="text-lg text-slate-500 mr-1">$</span>
                           {Math.round(stats.dailyTotal).toLocaleString()}
                         </span>
                         <div className="text-right">
-                          <span className="text-lg font-bold text-blue-400 font-mono">${stats.costPerKm.toFixed(1)}</span>
+                          <span className="text-base font-bold text-blue-400 font-mono">${stats.costPerKm.toFixed(1)}</span>
                           <span className="text-[10px] text-slate-500 ml-1">/KM</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Return Trip */}
-                    <div className="pt-2 border-t border-slate-800/50">
-                      <div className="flex justify-between items-end mb-1">
+                    <div className="pt-1.5 border-t border-slate-800/50">
+                      <div className="flex justify-between items-end mb-0.5">
                         <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">預估來回趟總成本</p>
                         <p className="text-xs text-slate-500 font-mono text-right">{Number(mileage) * 2} KM</p>
                       </div>
                       <div className="flex justify-between items-baseline">
-                        <span className="text-2xl font-black text-slate-300 font-mono tracking-tight">
-                          <span className="text-lg text-slate-500 mr-1">$</span>
+                        <span className="text-xl font-black text-slate-300 font-mono tracking-tight">
+                          <span className="text-base text-slate-500 mr-1">$</span>
                           {Math.round(stats.dailyTotal * 2).toLocaleString()}
                         </span>
                       </div>
@@ -475,15 +478,15 @@ export default function App() {
                   </div>
                   
                   {/* Interactive Pie Chart */}
-                  <div className="h-40 w-full">
+                  <div className="h-32 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
                           data={stats.breakdown.filter(item => item.value > 0)}
                           cx="50%"
                           cy="50%"
-                          innerRadius={45}
-                          outerRadius={65}
+                          innerRadius={35}
+                          outerRadius={50}
                           paddingAngle={5}
                           dataKey="value"
                           nameKey="label"
@@ -532,9 +535,9 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="p-4 space-y-6">
+              <div className="p-4 space-y-4">
                 {/* Section: Route */}
-                <section className="glass-card p-5 rounded-2xl">
+                <section className="glass-card p-4 rounded-2xl">
                   <div className="flex justify-between items-center mb-4">
                     <h2 className="text-sm font-bold text-emerald-400 flex items-center gap-2"><Route size={16}/> 路線選定</h2>
                     <div className="flex gap-2">
@@ -547,9 +550,13 @@ export default function App() {
                   <datalist id="saved-locations-list">
                     {savedLocations.map((loc, idx) => <option key={idx} value={loc} />)}
                   </datalist>
+                  
+                  <datalist id="saved-routes-list">
+                    {cloudRoutes.map((r, idx) => <option key={idx} value={r.name} />)}
+                  </datalist>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-                    <InputGroup label="路線名稱" type="text" icon={Tag} value={routeName} onChange={setRouteName} placeholder="例: 北高特急" />
+                    <InputGroup label="路線名稱" type="text" icon={Tag} value={routeName} onChange={setRouteName} list="saved-routes-list" placeholder="例: 北高特急" />
                     <div className="mb-4">
                       <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-1 mb-1.5 block">快速載入歷史路線</label>
                       <div className="relative">
@@ -627,7 +634,7 @@ export default function App() {
                 </section>
 
                 {/* Section: Variables */}
-                <section className="glass-card p-5 rounded-2xl">
+                <section className="glass-card p-4 rounded-2xl">
                   <h2 className="text-sm font-bold text-blue-400 mb-4 flex items-center gap-2"><Fuel size={16}/> 動態成本 (油資/耗損)</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
                     <InputGroup label="柴油 (NT$/L)" value={fuelPrice} onChange={setFuelPrice} step="0.1" />
@@ -639,7 +646,7 @@ export default function App() {
                 </section>
 
                 {/* Section: Fixed */}
-                <section className="glass-card p-5 rounded-2xl">
+                <section className="glass-card p-4 rounded-2xl">
                   <h2 className="text-sm font-bold text-rose-400 mb-4 flex items-center gap-2"><Building2 size={16}/> 固定分攤成本</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
                     <div className="md:col-span-2">
@@ -750,11 +757,13 @@ export default function App() {
 
               <div className="px-4 py-3 border-b border-slate-800 bg-slate-950/50 flex justify-between items-center shrink-0">
                 <span className="text-[11px] text-slate-400 flex items-center gap-1.5"><Info size={12}/> 從歷史報表萃取地點</span>
-                <label className="cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-colors shadow-md">
-                  {isImportingLocs ? <RotateCcw size={12} className="animate-spin" /> : <FileSpreadsheet size={12} />}
-                  匯入 XLS
-                  <input type="file" accept=".xls,.xlsx,.csv" className="hidden" onChange={handleImportLocations} disabled={isImportingLocs} />
-                </label>
+                <div className="flex gap-2">
+                  <label className="cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-colors shadow-md">
+                    {isImportingLocs ? <RotateCcw size={12} className="animate-spin" /> : <FileSpreadsheet size={12} />}
+                    匯入 XLS
+                    <input type="file" accept=".xls,.xlsx,.csv" className="hidden" onChange={handleImportLocations} disabled={isImportingLocs} />
+                  </label>
+                </div>
               </div>
 
               <div className="p-4 overflow-y-auto hide-scrollbar flex-1 space-y-2 bg-slate-900">
