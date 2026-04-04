@@ -22,25 +22,47 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 // ==========================================
 const GAS_URL = (import.meta as any).env.VITE_GAS_URL || "https://script.google.com/macros/s/AKfycbxMwgKyp5YcZ5ZDp6Q53V6qpA4sBmwoht3li9hGanbJFizk06ZazA7ohYxTNmQHJYbw/exec"; 
 const GOOGLE_MAPS_KEY = (import.meta as any).env.VITE_GOOGLE_MAPS_KEY || "AIzaSyDVt5ap79LCy2LPi7eWuCcl9MiRm7uKVCM";
-const GEMINI_API_KEY = (import.meta as any).env.VITE_GEMINI_API_KEY || (process.env as any).GEMINI_API_KEY;
+
+// Standardize API key access for Vite/Node environments
+const getGeminiKey = () => {
+  const envKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
+  const procKey = (process.env as any).GEMINI_API_KEY;
+  return envKey || procKey || "";
+};
+
+const GEMINI_API_KEY = getGeminiKey();
 
 // --- Gemini API Call using SDK ---
 async function callGemini(userQuery: string, systemPrompt: string = "") {
-  if (!GEMINI_API_KEY) {
-    throw new Error("Missing GEMINI_API_KEY");
+  const apiKey = GEMINI_API_KEY;
+  if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
+    const msg = !apiKey ? "API Key is empty" : "API Key is still set to placeholder 'MY_GEMINI_API_KEY'";
+    console.error(msg);
+    throw new Error(msg);
   }
   
-  const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-  const model = ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: [{ role: "user", parts: [{ text: userQuery }] }],
-    config: {
-      systemInstruction: systemPrompt,
-    },
-  });
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [{ role: "user", parts: [{ text: userQuery }] }],
+      config: {
+        systemInstruction: systemPrompt || "你是一位專業的物流與成本分析顧問，請用繁體中文回答。",
+        temperature: 0.7,
+      },
+    });
 
-  const response = await model;
-  return response.text || "無法回覆。";
+    if (!response || !response.text) {
+      throw new Error("Empty response from Gemini API");
+    }
+    
+    return response.text;
+  } catch (error: any) {
+    console.error("Gemini API Call Failed:", error);
+    let errorDetail = error.message || String(error);
+    if (error.status) errorDetail += ` (Status: ${error.status})`;
+    throw new Error(errorDetail);
+  }
 }
 
 // --- UI Components ---
@@ -120,6 +142,7 @@ export default function App() {
   const [isAILoading, setIsAILoading] = useState(false);
   const [quickInsight, setQuickInsight] = useState('');
   const [isInsightLoading, setIsInsightLoading] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // AI 快捷指令
@@ -424,13 +447,17 @@ export default function App() {
 
   const generateQuickInsight = async () => {
     setIsInsightLoading(true);
+    setDebugInfo(null);
     const fuelRatio = Math.round((stats.breakdown[0].value / stats.dailyTotal) * 100);
     const prompt = `我當前路線 ${routeName} (${mileage}KM) 單趟成本 $${Math.round(stats.dailyTotal)}。油資佔比 ${fuelRatio}%，油耗 ${fuelConsumption}km/L。請直接用繁體中文給出一段約 40 字的「成本健檢結論與警示」，語氣要專業直接，不需問候語。`;
     try {
       const response = await callGemini(prompt);
       setQuickInsight(response);
-    } catch (e) {
+    } catch (e: any) {
+      console.error("AI Insight Error:", e);
+      const errorMsg = e.message || String(e);
       setQuickInsight("⚠️ 無法取得 AI 診斷。");
+      setDebugInfo(`AI Error: ${errorMsg}`);
     }
     setIsInsightLoading(false);
   };
@@ -595,6 +622,15 @@ export default function App() {
                   <p className="text-xs text-slate-300 leading-relaxed min-h-[36px]">
                     {isInsightLoading ? 'Gemini 引擎分析中...' : (quickInsight || '點擊上方按鈕，取得針對當前參數的即時 AI 優化建議。')}
                   </p>
+                  {debugInfo && (
+                    <div className="mt-2 p-2 bg-rose-500/10 border border-rose-500/20 rounded text-[10px] text-rose-400 font-mono break-all">
+                      <p className="font-bold mb-1 underline">Debug Info:</p>
+                      {debugInfo}
+                      {!GEMINI_API_KEY && <p className="mt-1 font-bold text-rose-300">❌ 偵測到 API Key 缺失 (Empty)</p>}
+                      {GEMINI_API_KEY === "MY_GEMINI_API_KEY" && <p className="mt-1 font-bold text-rose-300">❌ API Key 仍為預設預留字串</p>}
+                      {GEMINI_API_KEY && GEMINI_API_KEY !== "MY_GEMINI_API_KEY" && <p className="mt-1 text-emerald-400">✅ API Key 已載入 (長度: {GEMINI_API_KEY.length})</p>}
+                    </div>
+                  )}
                 </div>
               </div>
 
