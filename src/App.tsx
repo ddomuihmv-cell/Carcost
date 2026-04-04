@@ -208,7 +208,7 @@ export default function App() {
 
     setIsCalculating(true);
     try {
-      const service = new google.maps.DistanceMatrixService();
+      const directionsService = new google.maps.DirectionsService();
       
       // Helper to ensure Taiwan context if not specified
       const formatLoc = (loc: string) => {
@@ -217,27 +217,33 @@ export default function App() {
         return (trimmed.includes("台灣") || trimmed.includes("Taiwan")) ? trimmed : `${trimmed}, Taiwan`;
       };
 
-      service.getDistanceMatrix({ 
-        origins: [formatLoc(startPoint)], 
-        destinations: [formatLoc(endPoint)], 
-        travelMode: google.maps.TravelMode.DRIVING 
-      }, (response: any, status: string) => {
+      directionsService.route({
+        origin: formatLoc(startPoint),
+        destination: formatLoc(endPoint),
+        travelMode: google.maps.TravelMode.DRIVING,
+        region: 'TW',
+        provideRouteAlternatives: false
+      }, (result: any, status: string) => {
         if (status === 'OK') {
-          const element = response.rows[0].elements[0];
-          if (element.status === 'OK') {
-            const dist = Math.ceil(element.distance.value / 1000);
+          const route = result.routes[0];
+          if (route && route.legs && route.legs[0]) {
+            const distanceInMeters = route.legs[0].distance.value;
+            // Use one decimal place for better precision
+            const dist = Math.round(distanceInMeters / 100) / 10;
             setMileage(dist);
             showToast(`算距完成：${dist} KM`);
-          } else if (element.status === 'NOT_FOUND') {
-            console.error("Google Maps Distance Matrix Element Error:", element.status);
-            showToast("找不到地點。請嘗試輸入更詳細的地址或加上縣市名稱（例如：台中烏日）。", "error");
           } else {
-            console.error("Google Maps Distance Matrix Element Error:", element.status);
-            showToast(`算距失敗: ${element.status}`, "error");
+            showToast("找不到有效路線", "error");
           }
         } else {
-          console.error("Google Maps Distance Matrix Service Error:", status);
-          showToast(`地圖服務錯誤: ${status}`, "error");
+          console.error("Google Maps Directions Service Error:", status);
+          if (status === 'NOT_FOUND') {
+            showToast("找不到地點。請嘗試輸入更詳細的地址或加上縣市名稱（例如：台中烏日）。", "error");
+          } else if (status === 'ZERO_RESULTS') {
+            showToast("找不到兩地之間的開車路線。", "error");
+          } else {
+            showToast(`地圖服務錯誤: ${status}`, "error");
+          }
         }
         setIsCalculating(false);
       });
