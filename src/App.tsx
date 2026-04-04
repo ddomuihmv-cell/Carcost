@@ -8,13 +8,12 @@ import {
   Fuel, User, Wrench, Building2, Route, Droplets, Truck, 
   Satellite, RotateCcw, Plus, Trash2, MapPin, Tag, Map,
   ArrowDown, ArrowRight, ChevronDown, FolderOpen, 
-  CloudUpload, Database, Edit2, Sparkles, Send, 
+  CloudUpload, Database, Edit2, 
   Calculator, Inbox, X, FileSpreadsheet, Info, 
   AlertCircle, CheckCircle2, Navigation
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
-import { GoogleGenAI } from "@google/genai";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 // ==========================================
@@ -22,48 +21,6 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 // ==========================================
 const GAS_URL = (import.meta as any).env.VITE_GAS_URL || "https://script.google.com/macros/s/AKfycbxMwgKyp5YcZ5ZDp6Q53V6qpA4sBmwoht3li9hGanbJFizk06ZazA7ohYxTNmQHJYbw/exec"; 
 const GOOGLE_MAPS_KEY = (import.meta as any).env.VITE_GOOGLE_MAPS_KEY || "AIzaSyDVt5ap79LCy2LPi7eWuCcl9MiRm7uKVCM";
-
-// Standardize API key access for Vite/Node environments
-const getGeminiKey = () => {
-  const envKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
-  const procKey = (process.env as any).GEMINI_API_KEY;
-  return envKey || procKey || "";
-};
-
-const GEMINI_API_KEY = getGeminiKey();
-
-// --- Gemini API Call using SDK ---
-async function callGemini(userQuery: string, systemPrompt: string = "") {
-  const apiKey = GEMINI_API_KEY;
-  if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
-    const msg = !apiKey ? "API Key is empty" : "API Key is still set to placeholder 'MY_GEMINI_API_KEY'";
-    console.error(msg);
-    throw new Error(msg);
-  }
-  
-  try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: [{ role: "user", parts: [{ text: userQuery }] }],
-      config: {
-        systemInstruction: systemPrompt || "你是一位專業的物流與成本分析顧問，請用繁體中文回答。",
-        temperature: 0.7,
-      },
-    });
-
-    if (!response || !response.text) {
-      throw new Error("Empty response from Gemini API");
-    }
-    
-    return response.text;
-  } catch (error: any) {
-    console.error("Gemini API Call Failed:", error);
-    let errorDetail = error.message || String(error);
-    if (error.status) errorDetail += ` (Status: ${error.status})`;
-    throw new Error(errorDetail);
-  }
-}
 
 // --- UI Components ---
 const InputGroup = ({ label, type="number", value, onChange, icon: IconComp, step="any", placeholder, list, onAddRight }: any) => (
@@ -134,35 +91,11 @@ export default function App() {
   const [newLocationInput, setNewLocationInput] = useState('');
   const [isImportingLocs, setIsImportingLocs] = useState(false);
 
-  // --- AI 狀態 ---
-  const [aiInput, setAiInput] = useState('');
-  const [aiMessages, setAiMessages] = useState([
-    { role: 'assistant', content: '您好！我是您的 AI 成本優化顧問。我可以幫您分析當前的路線成本或提供節流建議。' }
-  ]);
-  const [isAILoading, setIsAILoading] = useState(false);
-  const [quickInsight, setQuickInsight] = useState('');
-  const [isInsightLoading, setIsInsightLoading] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // AI 快捷指令
-  const aiPrompts = [
-    "📊 分析當前成本結構",
-    "⛽ 如何優化油耗與保修？",
-    "💡 給我三個降本增效的建議"
-  ];
-
   // --- 初始化 ---
   useEffect(() => {
     loadCloudData();
     loadGoogleMaps();
   }, []);
-
-  useEffect(() => {
-    if (activeTab === 'ai' && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [aiMessages, activeTab]);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ show: true, message, type });
@@ -182,13 +115,41 @@ export default function App() {
   const loadCloudData = async () => {
     setIsSyncing(true);
     try {
-      const res = await fetch(`${GAS_URL}?sheet=routes`);
-      const data = await res.json();
-      if (Array.isArray(data)) setCloudRoutes(data);
+      // 讀取路線
+      const resRoutes = await fetch(`${GAS_URL}?sheet=routes`);
+      const dataRoutes = await resRoutes.json();
+      if (Array.isArray(dataRoutes)) setCloudRoutes(dataRoutes);
+
+      // 讀取常用地點
+      const resLocs = await fetch(`${GAS_URL}?sheet=locations`);
+      const dataLocs = await resLocs.json();
+      if (Array.isArray(dataLocs)) {
+        const locNames = dataLocs.map((l: any) => l.name || l.location).filter(Boolean);
+        if (locNames.length > 0) {
+          setSavedLocations(locNames);
+          localStorage.setItem('m3_locations', JSON.stringify(locNames));
+        }
+      }
     } catch (e) {
       showToast("雲端讀取失敗，請檢查網路", "error");
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const syncLocationsToCloud = async (newList: string[]) => {
+    try {
+      await fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ 
+          action: 'sync_locations', 
+          sheet: 'locations', 
+          data: newList.map(name => ({ name })) 
+        })
+      });
+    } catch (e) {
+      console.error("Locations sync failed:", e);
     }
   };
 
@@ -316,6 +277,7 @@ export default function App() {
     const newList = [...savedLocations, val];
     setSavedLocations(newList);
     localStorage.setItem('m3_locations', JSON.stringify(newList));
+    syncLocationsToCloud(newList);
     showToast(`已新增常用地點：${val}`);
     return true;
   };
@@ -324,6 +286,7 @@ export default function App() {
     const newList = savedLocations.filter(l => l !== loc);
     setSavedLocations(newList);
     localStorage.setItem('m3_locations', JSON.stringify(newList));
+    syncLocationsToCloud(newList);
   };
 
   const handleImportLocations = (e: ChangeEvent<HTMLInputElement>) => {
@@ -338,7 +301,7 @@ export default function App() {
         const wb = XLSX.read(data, { type: 'array' });
         const rows: any[] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
 
-        const newLocsSet = new Set(savedLocations);
+        const newLocsSet = new Set<string>(savedLocations);
         let importedCount = 0;
 
         rows.forEach(row => {
@@ -353,6 +316,7 @@ export default function App() {
           const updatedList = Array.from(newLocsSet);
           setSavedLocations(updatedList);
           localStorage.setItem('m3_locations', JSON.stringify(updatedList));
+          syncLocationsToCloud(updatedList);
           showToast(`成功從表單萃取並匯入 ${importedCount} 個新地點！`);
         } else {
           showToast('未發現新地點，請確認表頭是否包含「起點」與「終點」', 'error');
@@ -380,20 +344,22 @@ export default function App() {
     };
     try {
       if (currentRouteId) {
-        await fetch(GAS_URL, { 
+        const res = await fetch(GAS_URL, { 
           method: 'POST', 
           headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
           body: JSON.stringify({ action: 'update', sheet: 'routes', id: currentRouteId, data: routeData }) 
         });
+        if (!res.ok) throw new Error("Update failed");
         setCloudRoutes(cloudRoutes.map(r => r.id === currentRouteId ? { ...r, ...routeData } : r));
         showToast("已更新路線模型");
       } else {
         const newRoute = { id: `R-${Date.now()}`, ...routeData, createdAt: new Date().toLocaleString() };
-        await fetch(GAS_URL, { 
+        const res = await fetch(GAS_URL, { 
           method: 'POST', 
           headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
           body: JSON.stringify({ action: 'create', sheet: 'routes', data: newRoute }) 
         });
+        if (!res.ok) throw new Error("Create failed");
         setCloudRoutes([newRoute, ...cloudRoutes]);
         setCurrentRouteId(newRoute.id);
         showToast("已建立並儲存新路線");
@@ -408,11 +374,12 @@ export default function App() {
   const handleDelete = async (id: string) => {
     setIsSyncing(true);
     try {
-      await fetch(GAS_URL, { 
+      const res = await fetch(GAS_URL, { 
         method: 'POST', 
         headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
         body: JSON.stringify({ action: 'delete', sheet: 'routes', id: id }) 
       });
+      if (!res.ok) throw new Error("Delete failed");
       setCloudRoutes(cloudRoutes.filter(r => r.id !== id)); 
       if (currentRouteId === id) handleNewRoute();
       showToast("已刪除模型");
@@ -421,54 +388,6 @@ export default function App() {
     } finally {
       setIsSyncing(false);
     }
-  };
-
-  const handleAISend = async (customQuery: string | null = null) => {
-    const query = typeof customQuery === 'string' ? customQuery : aiInput;
-    if (!query.trim()) return;
-    
-    if (typeof customQuery !== 'string') setAiInput('');
-    setAiMessages(prev => [...prev, { role: 'user', content: query }]);
-    setIsAILoading(true);
-
-    const systemPrompt = `你是一位專業的運務財務顧問。當前正在估算的路線為「${routeName}」，里程 ${mileage}KM。
-目前成本結構：總成本 $${Math.round(stats.dailyTotal)}，每公里 $${stats.costPerKm.toFixed(2)}。
-油耗設定 ${fuelConsumption} km/L。請根據這些數據給予精簡、專業的優化建議或回答問題。以繁體中文回覆。`;
-
-    try {
-      const response = await callGemini(query, systemPrompt);
-      setAiMessages(prev => [...prev, { role: 'assistant', content: response }]);
-    } catch (err) { 
-      setAiMessages(prev => [...prev, { role: 'assistant', content: "⚠️ AI 顧問暫時無法連線，請稍後再試。" }]); 
-    } finally {
-      setIsAILoading(false);
-    }
-  };
-
-  const generateQuickInsight = async () => {
-    setIsInsightLoading(true);
-    setDebugInfo(null);
-    const fuelRatio = Math.round((stats.breakdown[0].value / stats.dailyTotal) * 100);
-    const prompt = `我當前路線 ${routeName} (${mileage}KM) 單趟成本 $${Math.round(stats.dailyTotal)}。油資佔比 ${fuelRatio}%，油耗 ${fuelConsumption}km/L。請直接用繁體中文給出一段約 40 字的「成本健檢結論與警示」，語氣要專業直接，不需問候語。`;
-    try {
-      const response = await callGemini(prompt);
-      setQuickInsight(response);
-    } catch (e: any) {
-      console.error("AI Insight Error:", e);
-      const errorMsg = e.message || String(e);
-      setQuickInsight("⚠️ 無法取得 AI 診斷。");
-      setDebugInfo(`AI Error: ${errorMsg}`);
-    }
-    setIsInsightLoading(false);
-  };
-
-  const handleGenerateQuote = (item: any) => {
-    setActiveTab('ai');
-    const prompt = `請幫我寫一封正式的 B2B 運費報價信（草稿）。
-路線：${item.origin} 到 ${item.dest} (里程 ${item.mileage} KM)
-我方單趟成本預估為 $${item.totalCost}。
-請自動加上大約 20% 的合理利潤作為「最終報價」，並用專業、客氣的語氣說明我們的運輸品質，字數大約 150 字以內。`;
-    handleAISend(prompt);
   };
 
   return (
@@ -610,27 +529,6 @@ export default function App() {
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
-                </div>
-                
-                <div className="bg-indigo-900/20 border border-indigo-500/30 rounded-xl p-3 relative overflow-hidden mt-3">
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="text-[10px] font-bold text-indigo-400 flex items-center gap-1"><Sparkles size={12}/> AI 成本健檢</span>
-                    <button onClick={generateQuickInsight} disabled={isInsightLoading} className="text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-1 rounded shadow-md active:scale-95 transition-all disabled:opacity-50">
-                      {isInsightLoading ? <RotateCcw size={10} className="animate-spin" /> : '重新診斷'}
-                    </button>
-                  </div>
-                  <p className="text-xs text-slate-300 leading-relaxed min-h-[36px]">
-                    {isInsightLoading ? 'Gemini 引擎分析中...' : (quickInsight || '點擊上方按鈕，取得針對當前參數的即時 AI 優化建議。')}
-                  </p>
-                  {debugInfo && (
-                    <div className="mt-2 p-2 bg-rose-500/10 border border-rose-500/20 rounded text-[10px] text-rose-400 font-mono break-all">
-                      <p className="font-bold mb-1 underline">Debug Info:</p>
-                      {debugInfo}
-                      {!GEMINI_API_KEY && <p className="mt-1 font-bold text-rose-300">❌ 偵測到 API Key 缺失 (Empty)</p>}
-                      {GEMINI_API_KEY === "MY_GEMINI_API_KEY" && <p className="mt-1 font-bold text-rose-300">❌ API Key 仍為預設預留字串</p>}
-                      {GEMINI_API_KEY && GEMINI_API_KEY !== "MY_GEMINI_API_KEY" && <p className="mt-1 text-emerald-400">✅ API Key 已載入 (長度: {GEMINI_API_KEY.length})</p>}
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -787,9 +685,6 @@ export default function App() {
                       <div><p className="text-[10px] text-slate-500 mb-0.5">均攤/KM</p><p className="font-mono font-bold text-blue-400">${item.costPerKm}</p></div>
                       <div><p className="text-[10px] text-slate-500 mb-0.5">里程</p><p className="font-mono font-bold text-slate-300">{item.mileage}KM</p></div>
                     </div>
-                    <button onClick={() => handleGenerateQuote(item)} className="w-full bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-2 transition-all">
-                      <Sparkles size={14} /> 讓 AI 草擬客戶報價信
-                    </button>
                   </div>
                 ))}
                 {cloudRoutes.length === 0 && (
@@ -799,64 +694,6 @@ export default function App() {
                   </div>
                 )}
               </div>
-            </motion.div>
-          )}
-
-          {activeTab === 'ai' && (
-            <motion.div 
-              key="ai"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="h-full flex flex-col pb-24"
-            >
-               <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 p-4 shrink-0 shadow-lg relative z-20">
-                 <h2 className="text-white font-bold flex items-center gap-2 text-sm"><Sparkles size={16}/> AI 成本優化顧問</h2>
-                 <p className="text-white/80 text-xs mt-1">自動帶入當前估算之【{routeName}】數據進行分析</p>
-               </div>
-               <div className="flex-1 overflow-y-auto p-4 space-y-4 hide-scrollbar">
-                  {aiMessages.map((msg, idx) => (
-                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[85%] rounded-2xl p-3 text-sm shadow-md leading-relaxed ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-br-sm' : 'glass-card text-slate-200 rounded-bl-sm'}`}>
-                        {msg.content}
-                      </div>
-                    </div>
-                  ))}
-                  {isAILoading && (
-                    <div className="flex justify-start">
-                      <div className="max-w-[80%] glass-card rounded-2xl p-3 rounded-bl-sm flex gap-2 items-center text-sm text-slate-400">
-                        <RotateCcw size={14} className="animate-spin text-indigo-400"/> 分析計算中...
-                      </div>
-                    </div>
-                  )}
-                  <div ref={messagesEndRef} className="h-2"></div>
-               </div>
-               
-               <div className="px-3 pb-2 w-full overflow-x-auto hide-scrollbar shrink-0">
-                 <div className="flex gap-2 w-max">
-                   {aiPrompts.map((prompt, idx) => (
-                     <button key={idx} onClick={() => handleAISend(prompt)} disabled={isAILoading} className="bg-slate-800/80 backdrop-blur border border-slate-700 text-indigo-300 text-xs px-3 py-1.5 rounded-full shadow-sm active:scale-95 transition-all">
-                       {prompt}
-                     </button>
-                   ))}
-                 </div>
-               </div>
-
-               <div className="p-3 bg-slate-900 border-t border-slate-800 shrink-0">
-                 <div className="flex gap-2">
-                   <input 
-                    type="text" 
-                    value={aiInput} 
-                    onChange={e=>setAiInput(e.target.value)} 
-                    onKeyPress={e => e.key === 'Enter' && handleAISend()} 
-                    placeholder="詢問節流建議或分析..." 
-                    className="flex-1 bg-slate-950 border border-slate-700 rounded-full px-4 py-2.5 text-sm text-white outline-none focus:border-indigo-500" 
-                   />
-                   <button onClick={() => handleAISend()} disabled={!aiInput.trim() || isAILoading} className="w-11 h-11 rounded-full bg-indigo-600 active:bg-indigo-700 flex items-center justify-center text-white disabled:opacity-50">
-                    <Send size={18}/>
-                   </button>
-                 </div>
-               </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -871,10 +708,6 @@ export default function App() {
         <button onClick={()=>setActiveTab('history')} className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors ${activeTab === 'history' ? 'text-blue-400' : 'text-slate-500'}`}>
           <Database size={20} />
           <span className="text-[10px] font-bold">雲端紀錄</span>
-        </button>
-        <button onClick={()=>setActiveTab('ai')} className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors ${activeTab === 'ai' ? 'text-indigo-400' : 'text-slate-500'}`}>
-          <Sparkles size={20} />
-          <span className="text-[10px] font-bold">AI 顧問</span>
         </button>
       </nav>
 
